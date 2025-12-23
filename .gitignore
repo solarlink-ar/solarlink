@@ -5,7 +5,6 @@ virtual_enviroment/
 SolarLinkWebApp/.vscode/
 SolarLinkWebApp/static/CACHE/
 SolarLinkWebApp/user_mngmnt/migrations/
-
-
+.solarlink/
 
 

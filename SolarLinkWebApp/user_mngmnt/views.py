@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 from django.core.mail import EmailMessage
 from django.utils import timezone
 from . import models
-import datetime, requests, secrets, random, asyncio, json
+import requests, secrets, random, asyncio, json
 import dateutil.relativedelta
 
 
@@ -31,30 +31,32 @@ def calculador_cantidad_true(lista:list):
 def index(request):
     return render(request, "user_mngmnt/index.html")
 
-def convert_from_utc(time, from_utc):
+# convierte tiempo de utc a un tz
+def utc_to_tz(time, from_utc):
+    # offset delta de las hs ingresadas como parametro
     timezone_offset = timezone.timedelta(hours=abs(from_utc))
+    # si el tz esta por delante del utc
     if from_utc > 0:
+        # se suma al utc el delta
         return time + timezone_offset
+    # si el tz esta por atras del delta
     elif from_utc < 0:
+        # se resta al utc el delta
         return time - timezone_offset
 
-def timezone_for_filter(time, from_utc):
+# convierte a utc
+def tz_to_utc(time, from_utc):
+    # offset del tz
     timezone_offset = timezone.timedelta(hours=abs(from_utc))
+    # si el tz esta por delante de utc
     if from_utc > 0:
+        # se convierte a utc restando
         return time - timezone_offset
+    # si el tz esta por detras de utc
     elif from_utc < 0:
+        # se convierte a utc sumando
         return time + timezone_offset
     
-# decorador para pestañas que solo se pueden acceder sin estar logueado (regisro, login, etc)
-def unlogued_required(redirect_link):
-    def decorator(func):
-        def check(request):
-            if request.user.username == '':
-                return func(request)
-            else:
-                return redirect(redirect_link)
-        return check
-    return decorator
 
 # sender de mails, tomado de celery tasks
 def no_reply_sender(email, subject, html_message):
@@ -171,9 +173,11 @@ class SignupVerification(View):
 
 # Password reset
 class PasswordReset(View):
+    # vista del password reset
     def get(self, request):
         return render(request, "user_mngmnt/auth/password-reset.html")
     
+    # posteo de form para resetear contrasenia
     def post(self, request):
         # tomo mail
         email = request.POST['email']
@@ -194,8 +198,10 @@ class PasswordReset(View):
         # devuelvo vista con booleano para avisar que ya se envió mail
         return render(request, 'user_mngmnt/auth/password-reset-done.html')
     
-# password 
+# Cambio de contrasenia, genera token
 class PasswordSet(View):
+
+    # vista de cambio de contrasenia
     def get(self, request, token):
         # busco si hay pedidos de cambio de contraseña con ese token
         data = models.UsersTokens.objects.filter(password_reset_token = token)
@@ -208,7 +214,9 @@ class PasswordSet(View):
         else:
             # si no, redirijo a index
             return redirect('login')
+        
 
+    # post del form para cambio de contrasenia
     def post(self, request, token):
         # armo form con parametros posteados
         form = PasswordSetForm(request.POST)
@@ -239,7 +247,7 @@ class PasswordSet(View):
 ################################################ LOGIN ########################################################
 ###############################################################################################################
 
-
+# pagina de login /user/login/
 class Login(View):
 
     def get(self, request):
@@ -293,6 +301,7 @@ def logout(request):
 ################################################ DATOS ########################################################
 ###############################################################################################################
 
+# pagina de usuario /user/datos/
 class UserPage(View):
     def get(self, request):
         # usuario
@@ -302,11 +311,11 @@ class UserPage(View):
         # ahora en UTC
         now = timezone.now()
         # tiempo actual, pero con +3 hs de offset para tomar solo datos en el TZ del usuario
-        now_for_filter = timezone_for_filter(now, tz_offset)
+        now_for_filter = tz_to_utc(now, tz_offset)
         # ahora en el tz del usuario
-        now_on_tz = convert_from_utc(now, tz_offset)
+        now_on_tz = utc_to_tz(now, tz_offset)
         # comienzo del dia en el que el usuario esta ahora
-        today_start_tz = timezone_for_filter(datetime.datetime(now_on_tz.year, now_on_tz.month, now_on_tz.day, 0, 0, 0), tz_offset)
+        today_start_tz = tz_to_utc(timezone.datetime(now_on_tz.year, now_on_tz.month, now_on_tz.day, 0, 0, 0), tz_offset)
 
         # filtro los datos entre el comienzo del dia del usuario, y ahora
         today_data = models.DatosHora.objects.filter(user = user, time__range = [today_start_tz, now_for_filter])
@@ -326,7 +335,7 @@ class UserPage(View):
         
         # para cada dato del dia de hoy, sobreescribo el dato creado por el de la db, si lo hay
         for data in today_data:
-            dict_hoy[convert_from_utc(data.time, tz_offset).hour] = {"hora": convert_from_utc(data.time, tz_offset).hour,
+            dict_hoy[utc_to_tz(data.time, tz_offset).hour] = {"hora": utc_to_tz(data.time, tz_offset).hour,
                              "consumo_l1_proveedor": data.consumo_l1_proveedor,
                              "consumo_l2_proveedor":data.consumo_l2_proveedor,
                              "consumo_l1_solar": data.consumo_l1_solar,
@@ -384,7 +393,7 @@ class UserPage(View):
             # filtro entre el inicio y el final del dia
             day_data = week_data.filter(time__range=[day_start, day_end])
             # dia y mes en formato DD/MM string, pasado al timezone del usuario
-            dias.append(f"{convert_from_utc(day_start, tz_offset).day}/{convert_from_utc(day_start, tz_offset).month}")
+            dias.append(f"{utc_to_tz(day_start, tz_offset).day}/{utc_to_tz(day_start, tz_offset).month}")
             # calculo consumo del proveedor y solar
             for data in day_data:
                 consumo_diaproveedor += data.consumo_hora_red
@@ -415,7 +424,7 @@ class UserPage(View):
         ####################### AGNO #######################
 
         # inicio del agno en el timezone del usuario
-        year_start = timezone_for_filter(timezone.datetime(year = now_for_filter.year, month = 1, day = 1), tz_offset)
+        year_start = tz_to_utc(timezone.datetime(year = now_for_filter.year, month = 1, day = 1), tz_offset)
         # final del agno en el timezone del usuario
         year_end = year_start + dateutil.relativedelta.relativedelta(years=1)
         
@@ -465,11 +474,155 @@ class UserPage(View):
         return render(request, "user_mngmnt/index.html", context)
 
         
-
 ###############################################################################################################
 ################################################# API #########################################################
 ###############################################################################################################
 
+# API para pedir a la db datos del tablero del usuario
+class APIData(View):
+    def get(self, request):
+        # usuario
+        user = request.user
+        # offset de timezone en db
+        tz_offset = user.timezone.timezone_offset
+        # ahora en UTC
+        now = timezone.now()
+
+        # tiempo actual en el tz del usuario
+        now_on_tz = utc_to_tz(now, tz_offset)
+
+
+        ###################### HOY ######################
+
+        # comienzo del dia del tz que el usuario esta ahora, en utc
+        today_start_tz = tz_to_utc(timezone.datetime(now_on_tz.year, now_on_tz.month, now_on_tz.day, 0, 0, 0), tz_offset)
+
+
+        # filtro los datos entre el comienzo del dia en el tz del usuario, y ahora
+        today_data = models.DatosHora.objects.filter(user = user, time__range = [today_start_tz, today_start_tz + dateutil.relativedelta.relativedelta(hours=24)])
+
+        
+        # contexto a enviar
+        context = {}
+
+
+        data_day = []
+        # para cada hora del dia, creo un dato
+        for i in range(0, 24):
+            data_day.append({"hora": i,
+                            "consumo_l1_proveedor": 0,
+                            "consumo_l2_proveedor": 0,
+                            "consumo_l1_solar": 0,
+                            "consumo_l2_solar": 0})
+        
+        # para cada dato del dia de hoy, sobreescribo el dato creado por el de la db, si lo hay
+        for data in today_data:
+            data_day[utc_to_tz(data.time, tz_offset).hour] = {"hora": utc_to_tz(data.time, tz_offset).hour,
+                             "consumo_l1_proveedor": data.consumo_l1_proveedor,
+                             "consumo_l2_proveedor":data.consumo_l2_proveedor,
+                             "consumo_l1_solar": data.consumo_l1_solar,
+                             "consumo_l2_solar": data.consumo_l2_solar}
+
+
+        # seccion hoy
+        context["today"] = {}
+        if today_data:
+            context["today"]["is_data"] = True
+            context["today"]["data"] = data_day
+
+        else:
+            context["today"]["is_data"] = False
+
+        ###################### SEMANA ######################
+
+
+        # tiempo de hace una semana, pero adaptado a timezone para filtrar en la database
+        a_week_ago_tz = today_start_tz - timezone.timedelta(days=7)
+        # datos de toda la semana entre el timezone del usuario
+        week_data = models.DatosHora.objects.filter(user = user, time__range=[a_week_ago_tz, today_start_tz])
+ 
+        # datos semanales finales
+        data_week = []
+        # para cada dia desde hoy hasta hace una semana
+        for i in range(1, 8):
+            # vars
+            consumo_dia_solar = 0
+            consumo_dia_proveedor = 0
+
+            # inicio del dia a ver
+            day_start = a_week_ago_tz + timezone.timedelta(days=i-1)
+            # final del dia a ver
+            day_end = a_week_ago_tz + timezone.timedelta(days=i)
+            # filtro entre el inicio y el final del dia
+            day_data = week_data.filter(time__range=[day_start, day_end])
+            # dia y mes en formato DD/MM string, en el tz del usuario
+            dia = f"{utc_to_tz(day_start, tz_offset).day}/{utc_to_tz(day_start, tz_offset).month}"
+            # calculo consumo del proveedor y solar del dia, sumando el de cada hora
+            for data in day_data:
+                consumo_dia_proveedor += data.consumo_hora_red
+                consumo_dia_solar += data.consumo_hora_solar
+            
+            # apendo un dict del dia a la lista
+            data_week.append({"dia": dia, "consumo_dia_proveedor": consumo_dia_proveedor, 
+                            "consumo_dia_solar": consumo_dia_solar})
+            
+            
+        
+        context["week"] = {}
+        # contexto
+        if week_data:
+            context["week"]["is_data"] = True
+            context["week"]["data"] = data_week
+        else:
+            context["week"]["is_data"] = False
+
+        ####################### AGNO #######################
+
+        # inicio del agno en el timezone del usuario
+        year_start = tz_to_utc(timezone.datetime(year = now_on_tz.year, month = 1, day = 1), tz_offset)
+        # final del agno en el timezone del usuario
+        year_end = year_start + dateutil.relativedelta.relativedelta(years=1)
+        
+        # datos de todos el agno
+        year_data = models.DatosHora.objects.filter(user = user, time__range=[year_start, year_end])
+
+        data_year = []
+
+        # para cada mes del agno
+        for i in range(1, 13):
+            # vars
+            consumo_mes_solar = 0
+            consumo_mes_proveedor = 0
+
+            # inicio de cada mes
+            month_start = year_start + dateutil.relativedelta.relativedelta(months=i-1)
+            # un mes dsps del inicio
+            month_end = year_start + dateutil.relativedelta.relativedelta(months=i)
+
+            # datos del mes
+            month_data = year_data.filter(time__range = [month_start, month_end])
+
+            # para cada dato del mes, sumo a la variable mensual
+            for data in month_data:
+                consumo_mes_proveedor += data.consumo_l1_proveedor + data.consumo_l2_proveedor
+                consumo_mes_solar += data.consumo_l1_solar + data.consumo_l2_solar
+
+            # guardo datos en lista de los meses, paso a kW/h
+            data_year.append({"month": i, "consumo_mes_proveedor": consumo_mes_proveedor / 1000, 
+                              "consumo_mes_solar": consumo_mes_solar / 1000})
+
+        context["year"] = {}
+        # contexto
+        if year_data:
+            context["year"]["is_data"] = True
+            context["year"]["data"] = data_year
+        else:
+            context["year"]["is_data"] = False
+
+        print(timezone.now())
+        return JsonResponse(context)
+    
+# API para actualizar status offline-online de un usuario
 class OnlineUsersUpdate(View):
     # pone usuario offline
     def post(self, request):
@@ -495,6 +648,7 @@ class OnlineUsersUpdate(View):
 
         return JsonResponse({"response":True})
 
+# API para retornar si el usuario esta o no conectado
 class shouldPost(View):
     def get(self, request):
         # si el contenido esta en post
@@ -514,14 +668,8 @@ class shouldPost(View):
         # si el usuario esta logueado, mando True
         return JsonResponse({"response": user.isonline.is_online})
 
-   
+# API para subir datos hora a nombre del usuario
 class LoadData(View):
-
-    def do_after(self):
-
-        data = self.data
-
-
 
     def post(self, request):
         # si el contenido esta en post
@@ -533,6 +681,7 @@ class LoadData(View):
         if request.body and not request.POST:
             data = json.loads(request.body)
 
+        # usuario y contrasenia
         username = data["username"]
         password = data["password"]
 
@@ -557,24 +706,31 @@ class LoadData(View):
 
 
 
-
+# API para ver dato del tablero en tiempo real o subirlos
 class DataNow(View):
-
+    # retorna ultimo dato en tiempo real
     def get(self, request):
+        # user
         user = request.user
+        # datos en tiempo real del usuario
         data = models.TiempoReal.objects.filter(user=user)
+        # si hay datos
         if data:
+            # se toma el ultimo
             for d in data:
                 now = d
+            # se devuelven datos actuales
             response = {"voltaje": now.voltaje,
                         "consumo_l1": now.consumo_l1,
                         "consumo_l2": now.consumo_l2,
                         "solar": (now.solar_l1 or now.solar_l2)}
-            
+            # retorno datos
             return JsonResponse(response)
+        # si no hay datos, devuelvo false
         else:
             return JsonResponse({"response": False})
-
+        
+    # sube dato en tiempo real a la db
     def post(self, request):
         # si el contenido esta en post
         if request.POST:
@@ -606,7 +762,7 @@ class DataNow(View):
         
         return JsonResponse({"status": True})
 
-
+# API para validacion de usuarios
 class APILogin(View):
     async def post(self, request):
         # si el contenido esta en post
@@ -632,12 +788,6 @@ class APILogin(View):
         
         return JsonResponse(response)
     
-class EdesurEdenor(View):
-
-    async def get(self, request):
-        web = requests.get('https://www.enre.gov.ar/web/tarifasd.nsf/todoscuadros/7A2E515E48ECD5EB032589650044C8A6?opendocument')
-        soup = BeautifulSoup(web.content, 'html.parser')
-        
 
 ###############################################################################################################
 ################################################ CRONS ########################################################
@@ -652,8 +802,8 @@ def token_clean(request):
     actual = timezone.now()
     # para cada dato
     for d in data:
-        # si el tiempo entre que el token fue creado y el actual es mayor a 2hs
-        if (actual - d.time) > datetime.timedelta(hours=1):
+        # si el tiempo entre que el token fue creado y el actual es mayor a 1h
+        if (actual - d.time) > timezone.timedelta(hours=1):
             # borro el token
             d.delete()
 
@@ -673,7 +823,7 @@ def creador(request):
                      consumo_l1_proveedor = 300,
                      consumo_l2_solar = 400,
                      consumo_l2_proveedor = 500,
-                     time = timezone.datetime(2023, 11, 7, 12, tzinfo=timezone.utc)).save()
+                     time = timezone.datetime(2024, 10, 2, 12, tzinfo=timezone.utc)).save()
 
     models.DatosHora(user = user,
                      voltaje_hora_red = 200,
@@ -683,7 +833,7 @@ def creador(request):
                      consumo_l1_proveedor = 300,
                      consumo_l2_solar = 400,
                      consumo_l2_proveedor = 500,
-                     time = timezone.datetime(2023, 11, 7, 2)).save()
+                     time = timezone.datetime(2024, 10, 2, 2)).save()
     
     models.DatosHora(user = user,
                      voltaje_hora_red = 200,
@@ -693,7 +843,7 @@ def creador(request):
                      consumo_l1_proveedor = 300,
                      consumo_l2_solar = 400,
                      consumo_l2_proveedor = 500,
-                     time = timezone.datetime(2023, 11, 7, 4)).save()
+                     time = timezone.datetime(2024, 10, 2, 4)).save()
     models.DatosHora(user = user,
                      voltaje_hora_red = 200,
                      consumo_hora_solar = 400,
@@ -702,7 +852,7 @@ def creador(request):
                      consumo_l1_proveedor = 300,
                      consumo_l2_solar = 400,
                      consumo_l2_proveedor = 500,
-                     time = timezone.datetime(2023, 11, 7, 3)).save()
+                     time = timezone.datetime(2024, 10, 2, 3)).save()
 
                 
 def sender(request):
@@ -711,61 +861,3 @@ def sender(request):
     #mail.content_subtype = 'html' # aclaracion de tipo de contenido
     #mail.send()
 
-def confirmation(request):
-    #ordenador.delay()
-    users = models.User.objects.all()
-    
-    for user in users:
-
-        user_data = models.DatosHora.objects.filter(user=user)
-
-        while user_data:
-
-            voltaje_dia_red = []
-            consumo_dia_red = 0
-            consumo_dia_solar = 0
-            solar_por_hora = []
-            potencia_dia_panel = 0
-            horas_de_carga = []
-            voltajes_bateria = []
-            errores = []
-
-            referencia = user_data[0]
-
-            dia_data = user_data.filter(dia=referencia.dia, mes=referencia.mes, año=referencia.año)
-            
-            for data in dia_data:
-                # guardado de datos
-                voltaje_dia_red.append(data.voltaje_hora_red)
-                consumo_dia_solar += data.consumo_hora_solar
-                consumo_dia_red += data.consumo_hora_red
-
-                solar_por_hora.append(data.solar_ahora)
-                potencia_dia_panel += data.panel_potencia
-                horas_de_carga.append(data.cargando)
-                voltajes_bateria.append(data.voltaje_bateria)
-
-                errores.append(data.errores)
-                product_id = data.product_id
-
-                data.delete()
-            
-            # creo dato dia
-            models.DatosDias(user = user,
-                            voltaje_maximo_dia_red = max(voltaje_dia_red),
-                            voltaje_minimo_dia_red = min(voltaje_dia_red),
-                            consumo_dia_solar = consumo_dia_solar,
-                            consumo_dia_red = consumo_dia_red,
-
-                            dia = referencia.dia,
-                            mes = referencia.mes,
-                            año = referencia.año,
-
-                            horas_potencia_panel = calculador_cantidad_true(solar_por_hora),
-                            potencia_dia_panel = potencia_dia_panel,
-                            horas_de_carga = calculador_cantidad_true(horas_de_carga),
-                            voltajes_bateria = json.dumps(voltajes_bateria),
-                            errores = calculador_cantidad_true(errores),
-                            product_id = data.product_id).save()
-            
-            user_data = models.DatosHora.objects.filter(user=user)

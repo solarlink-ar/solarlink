@@ -188,44 +188,7 @@
                                 <h2 class='mb-5' style='text-align:center;vertical-align:middle;'>Aun no hay datos</h2>
                             </div>
                             {% endif %}
-                            <!-- 
-                            <h5 class="text-primary-gradient text-center fw-medium">Bateria</h5>
-                            <h1 class="mb-4 text-center">Uso de bateria ultima semana</h1>
-                            <div class="col-sm-6 wow fadeIn" data-wow-delay="0.5s">
-                                <div class="d-flex">
-                                    <i class="fa fa-sun fa-2x text-primary-gradient flex-shrink-0 mt-1"></i>
-                                    <div class="ms-3">
-                                        <h2 class="mb-0" data-toggle="counter-up">{{porcentaje.generado}}</h2>
-                                        <p class="text-primary-gradient mb-0">porcentaje generado</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-sm-6 wow fadeIn" data-wow-delay="0.5s">
-                                <div class="d-flex">
-                                    <i class="fa fa-chart-line fa-2x text-primary-gradient flex-shrink-0 mt-1"></i>
-                                    <div class="ms-3">
-                                        <h2 class="mb-0" data-toggle="counter-up">{{porcentaje.adquirido}}</h2>
-                                        <p class="text-primary-gradient mb-0">porcentaje adquirido</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-sm-6 wow fadeIn" data-wow-delay="0.5s">
-                                <div class="d-flex">
-                                    <i class="fa fa-fire fa-2x text-primary-gradient flex-shrink-0 mt-1"></i>
-                                    <div class="ms-3">
-                                        <h2 class="mb-0" data-toggle="counter-up">{{porcentaje.utilizado}}</h2>
-                                        <p class="text-primary-gradient mb-0">porcentaje utilizado</p>
-                                    </div>
-                                </div>
-                            </div>
-                            {% if datos_ahorro_ok %}
-                            <canvas id="bateria" style="width: 100%; max-width: 1000px;"></canvas>
-                            {% else %}
-                            <div>
-                                <h2 class='mb-5' style='text-align:center;vertical-align:middle;'>Aun no hay datos</h2>
-                            </div>
-                            {% endif %}
-                        -->
+
                             <script>
                                 window.onload = fetch('/user/user-set-online/');
                                 window.onload = setInterval(actual, 5000);
@@ -321,33 +284,6 @@
                                     }
                                   });
                                 {% endif %}
-                                //new Chart("bateria", {
-                                  {% comment %} type: "bar",
-                                  data: {
-                                    labels: xBat,
-                                    datasets: [{
-                                      label: "Consumo utilizado",
-                                      backgroundColor: "rgba(255,0,0,0.5)",
-                                      data: [17.8]
-                                    },
-                                    {
-                                      label: "Consumo generado",
-                                      backgroundColor: "rgba(178,222,39,0.8)",
-                                      data: [15]
-                                    }]
-                                  },    
-                                  options: {
-                                    indexAxis: 'y',
-                                    legend: {
-                                      display: true, 
-                                    },
-                                    title: {
-                                      display: true,
-                                      text: "Porcentaje bateria",
-                                      fontSize: 16
-                                    }
-                                  }
-                                }); {% endcomment %}
                                 {% if datos_anual %}
                                 new Chart("anual", {
                                   type: "bar",

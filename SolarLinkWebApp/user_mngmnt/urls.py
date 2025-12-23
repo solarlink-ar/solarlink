@@ -40,13 +40,13 @@ urlpatterns = [
     path("password-reset/", views.PasswordReset.as_view(), name="password_reset"),
     # API #
     path("api-login/", csrf_exempt(views.APILogin.as_view()), name="api_login"),
-    path("api-tarifas/", views.EdesurEdenor.as_view(), name="api_tarifas"),
     path("load-data/", csrf_exempt(views.LoadData.as_view()), name="load_data"),
     path("tiempo-real/", csrf_exempt(views.DataNow.as_view()), name="tiempo_real"),
     path("user-set-online/", csrf_exempt(views.OnlineUsersUpdate.as_view()), name="user_set_online"),
     path("user-is-online/", csrf_exempt(views.shouldPost.as_view()), name="user_is_online"),
     # USERPAGE #
     path("datos/", login_required(views.UserPage.as_view()), name="userpage"),
+    path("api-data/", login_required(views.APIData.as_view()), name="api_data"),
     # TESTS #
     path("creador/", views.creador, name="creador"),
     path("sender/", views.sender, name="sender"),
